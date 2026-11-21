@@ -13,7 +13,6 @@ namespace CactusTune
         private readonly Dictionary<ulong, double> _next = new Dictionary<ulong, double>();
         private SceneTree _tree;
         private double _scanAt;
-        private bool _scaled;
 
         public void Initialize(XWModRuntimeContext context)
         {
@@ -41,7 +40,7 @@ namespace CactusTune
         {
             double now = Time.GetTicksMsec() / 1000.0;
             if (now < _scanAt) return;
-            _scanAt = now + 0.25;
+            _scanAt = now + 0.1;
             if (_tree?.Root == null) return;
             Walk(_tree.Root, now);
         }
@@ -57,13 +56,6 @@ namespace CactusTune
             ulong id = plant.GetInstanceId();
             Type type = plant.GetType();
 
-            if (!_scaled)
-            {
-                _scaled = true;
-                if (plant is Node2D n2) n2.Scale = new Vector2(2.5f, 2.5f);
-                Console.WriteLine("CACTUS_TUNE_FOUND " + id);
-            }
-
             if (_done.Add(id))
             {
                 object shell = FindField(type, "_shell")?.GetValue(plant);
@@ -72,11 +64,13 @@ namespace CactusTune
                     FieldInfo dmg = FindField(shell.GetType(), "baseDamage");
                     if (dmg != null) dmg.SetValue(shell, 10000.0);
                 }
+                Console.WriteLine("CACTUS_TUNE_APPLY " + id);
             }
 
             if (!_next.TryGetValue(id, out double next) || now >= next)
             {
                 FindField(type, "_mainReady")?.SetValue(plant, true);
+                FindField(type, "_firing")?.SetValue(plant, false);
                 _next[id] = now + 0.5;
             }
         }
