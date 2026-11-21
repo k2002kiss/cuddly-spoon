@@ -132,21 +132,18 @@ namespace CactusTune
                     if (dmg < 5000) continue;
 
                     FieldInfo velField = FindField(bt, "vel");
+                    FieldInfo speedField = FindField(bt, "speed");
                     if (velField == null) continue;
                     Vector2 vel = (Vector2)velField.GetValue(boxed);
                     float len = vel.Length();
-                    if (len < 40f) continue;
+                    float sp = speedField != null ? Convert.ToSingle(speedField.GetValue(boxed)) : 0f;
+                    if (len < 40f && sp < 40f) continue;
 
                     const float factor = 0.05f;
-                    velField.SetValue(boxed, vel * factor);
-                    FieldInfo speedField = FindField(bt, "speed");
-                    if (speedField != null)
-                    {
-                        float sp = Convert.ToSingle(speedField.GetValue(boxed));
-                        if (sp > 1f) speedField.SetValue(boxed, sp * factor);
-                    }
+                    if (len > 1f) velField.SetValue(boxed, vel * factor);
+                    if (speedField != null && sp > 1f) speedField.SetValue(boxed, sp * factor);
                     data.SetValue(boxed, idx);
-                    Console.WriteLine("CACTUS_TUNE_BULLET idx=" + idx + " dmg=" + dmg + " len=" + len);
+                    Console.WriteLine("CACTUS_TUNE_BULLET idx=" + idx + " dmg=" + dmg + " len=" + len + " sp=" + sp);
                 }
             }
             catch (Exception e) { Console.WriteLine("CACTUS_TUNE_BULLET_ERR " + e.Message); }
