@@ -58,12 +58,9 @@ namespace CactusTune
 
             if (_done.Add(id))
             {
-                object shell = FindField(type, "_shell")?.GetValue(plant);
-                if (shell != null)
-                {
-                    FieldInfo dmg = FindField(shell.GetType(), "baseDamage");
-                    if (dmg != null) dmg.SetValue(shell, 10000.0);
-                }
+                SetDamage(FindField(type, "_shell")?.GetValue(plant), 200000.0);
+                SetDamage(FindField(type, "_spike")?.GetValue(plant), 10000.0);
+                SetDamage(FindField(type, "_droneSpike")?.GetValue(plant), 10000.0);
                 Console.WriteLine("CACTUS_TUNE_APPLY " + id);
             }
 
@@ -73,6 +70,12 @@ namespace CactusTune
                 FindField(type, "_firing")?.SetValue(plant, false);
                 _next[id] = now + 0.5;
             }
+        }
+
+        private static void SetDamage(object projectile, double value)
+        {
+            if (projectile == null) return;
+            FindField(projectile.GetType(), "baseDamage")?.SetValue(projectile, value);
         }
 
         private static FieldInfo FindField(Type type, string name)
