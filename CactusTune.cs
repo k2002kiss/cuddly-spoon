@@ -63,40 +63,36 @@ namespace CactusTune
             try
             {
                 Type rmType = typeof(XWModRuntimeContext).Assembly.GetType("ResourceManager");
-                if (rmType == null) { Console.WriteLine("CACTUS_GOLD no ResourceManager"); return; }
+                if (rmType == null) return;
                 object inst = rmType.GetProperty("Instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null);
-                if (inst == null) { Console.WriteLine("CACTUS_GOLD no instance"); return; }
+                if (inst == null) return;
                 object banksObj = rmType.GetProperty("TOWERDEFENSE_PACKETBANKS", Flags)?.GetValue(inst);
-                if (!(banksObj is Godot.Collections.Dictionary banks)) { Console.WriteLine("CACTUS_GOLD no banks"); return; }
+                if (!(banksObj is Godot.Collections.Dictionary banks)) return;
 
                 Godot.Collections.Dictionary targetCat = null;
                 Godot.Collections.Array targetArr = null;
-
                 foreach (var k in banks.Keys)
                 {
                     object bank = banks[k];
                     if (bank == null) continue;
                     object catObj = FindField(bank.GetType(), "category")?.GetValue(bank);
                     if (!(catObj is Godot.Collections.Dictionary cat)) continue;
-                    if (!cat.ContainsKey("Gold")) continue;
-                    var arr = cat["Gold"].AsGodotArray();
-                    if (targetArr == null) { targetCat = cat; targetArr = arr; }
-                    bool hasOriginal = false;
-                    foreach (var v in arr) if (v.AsString() == "PlantCactusCannon") { hasOriginal = true; break; }
-                    if (hasOriginal) { targetCat = cat; targetArr = arr; break; }
+                    if (!cat.ContainsKey("Diamond")) continue;
+                    targetCat = cat;
+                    targetArr = cat["Diamond"].AsGodotArray();
+                    break;
                 }
-
-                if (targetArr == null) { Console.WriteLine("CACTUS_GOLD no Gold category"); return; }
+                if (targetArr == null) { Console.WriteLine("CACTUS_DIAMOND no category"); return; }
                 bool has = false;
                 foreach (var v in targetArr) if (v.AsString() == "CactusCannonX") { has = true; break; }
                 if (!has)
                 {
                     targetArr.Add("CactusCannonX");
-                    targetCat["Gold"] = targetArr;
+                    targetCat["Diamond"] = targetArr;
                 }
-                Console.WriteLine("CACTUS_GOLD injected=" + (!has));
+                Console.WriteLine("CACTUS_DIAMOND injected=" + (!has));
             }
-            catch (Exception e) { Console.WriteLine("CACTUS_GOLD error " + e.Message); }
+            catch (Exception e) { Console.WriteLine("CACTUS_DIAMOND error " + e.Message); }
         }
 
         private static void ScaleField(Type type, object boxed, string name, float factor)
@@ -176,7 +172,7 @@ namespace CactusTune
                     float sp = speedField != null ? Convert.ToSingle(speedField.GetValue(boxed)) : 0f;
                     if (len < 40f && sp < 40f) continue;
 
-                    const float factor = 0.1f;
+                    const float factor = 0.2f;
                     if (len > 1f) velField.SetValue(boxed, vel * factor);
                     if (speedField != null && sp > 1f) speedField.SetValue(boxed, sp * factor);
                     data.SetValue(boxed, idx);
