@@ -81,10 +81,12 @@ namespace CactusTune
             if (_shots.Contains(id)) return;
 
             Type type = shot.GetType();
-            object owner = FindField(type, "fireCharacter")?.GetValue(shot);
-            if (owner == null) return;
-            string ownerName = ReadName(ReadConfig(owner.GetType(), owner));
-            if (ownerName != "CactusCannonX") return;
+            object dmgObj = FindField(type, "damage")?.GetValue(shot);
+            double dmg = 0;
+            if (dmgObj is float f) dmg = f;
+            else if (dmgObj is double d) dmg = d;
+            else if (dmgObj is int i) dmg = i;
+            if (dmg < 5000) return;
 
             FieldInfo velField = FindField(type, "velocity");
             if (velField == null) return;
@@ -92,7 +94,7 @@ namespace CactusTune
             float len = vel.Length();
             if (len < 1f) return;
 
-            float factor = len > 300f ? 0.2f : 0.16667f;
+            const float factor = 0.05f;
             vel *= factor;
             velField.SetValue(shot, vel);
 
@@ -100,11 +102,11 @@ namespace CactusTune
             if (speedField != null)
             {
                 object sp = speedField.GetValue(shot);
-                if (sp is float f) speedField.SetValue(shot, f * factor);
-                else if (sp is double d) speedField.SetValue(shot, d * factor);
+                if (sp is float sf) speedField.SetValue(shot, sf * factor);
+                else if (sp is double sd) speedField.SetValue(shot, sd * factor);
             }
             _shots.Add(id);
-            Console.WriteLine("CACTUS_TUNE_SHOT " + id + " speed=" + len);
+            Console.WriteLine("CACTUS_TUNE_SHOT " + id + " dmg=" + dmg + " speed=" + len);
         }
 
         private static void SetDamage(object projectile, double value)
