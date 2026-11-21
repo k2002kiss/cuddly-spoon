@@ -64,7 +64,7 @@ namespace CactusTune
                 if (asm == null) { Console.WriteLine("CACTUS_GOLD no ResourceManager"); return; }
                 object inst = asm.GetProperty("Instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null);
                 if (inst == null) { Console.WriteLine("CACTUS_GOLD no instance"); return; }
-                object banksObj = asm.GetProperty("TOWERDEFENSE_PACKETBANKS", Flags | BindingFlags.Static)?.GetValue(inst);
+                object banksObj = asm.GetProperty("TOWERDEFENSE_PACKETBANKS", Flags)?.GetValue(inst);
                 if (!(banksObj is Godot.Collections.Dictionary banks)) { Console.WriteLine("CACTUS_GOLD no banks"); return; }
                 int added = 0;
                 foreach (var k in banks.Keys)
