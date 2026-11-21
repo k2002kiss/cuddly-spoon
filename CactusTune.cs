@@ -69,28 +69,40 @@ namespace CactusTune
                 object banksObj = rmType.GetProperty("TOWERDEFENSE_PACKETBANKS", Flags)?.GetValue(inst);
                 if (!(banksObj is Godot.Collections.Dictionary banks)) return;
 
-                Godot.Collections.Dictionary targetCat = null;
-                Godot.Collections.Array targetArr = null;
+                var targets = new HashSet<string>();
+                try
+                {
+                    string text = Godot.FileAccess.GetFileAsString("res://Asset/Config/PacketBank/PacketBankResource.json");
+                    var root = Godot.Json.ParseString(text).AsGodotDictionary();
+                    foreach (var kv in root)
+                    {
+                        string key = kv.Key.AsString();
+                        var obj = kv.Value.AsGodotDictionary();
+                        if (key == "GeneralPlant") { targets.Add(key); continue; }
+                        if (!obj.ContainsKey("Include")) continue;
+                        foreach (var v in obj["Include"].AsGodotArray())
+                            if (v.AsString() == "GeneralPlant") { targets.Add(key); break; }
+                    }
+                }
+                catch (Exception e) { Console.WriteLine("CACTUS_DIAMOND json " + e.Message); }
+
+                int added = 0;
                 foreach (var k in banks.Keys)
                 {
+                    string key = k.AsString();
+                    if (targets.Count > 0 && !targets.Contains(key)) continue;
                     object bank = banks[k];
                     if (bank == null) continue;
                     object catObj = FindField(bank.GetType(), "category")?.GetValue(bank);
                     if (!(catObj is Godot.Collections.Dictionary cat)) continue;
-                    if (!cat.ContainsKey("Diamond")) continue;
-                    targetCat = cat;
-                    targetArr = cat["Diamond"].AsGodotArray();
-                    break;
+                    Godot.Collections.Array arr;
+                    if (cat.ContainsKey("Diamond")) arr = cat["Diamond"].AsGodotArray();
+                    else { arr = new Godot.Collections.Array(); }
+                    bool has = false;
+                    foreach (var v in arr) if (v.AsString() == "CactusCannonX") { has = true; break; }
+                    if (!has) { arr.Add("CactusCannonX"); cat["Diamond"] = arr; added++; }
                 }
-                if (targetArr == null) { Console.WriteLine("CACTUS_DIAMOND no category"); return; }
-                bool has = false;
-                foreach (var v in targetArr) if (v.AsString() == "CactusCannonX") { has = true; break; }
-                if (!has)
-                {
-                    targetArr.Add("CactusCannonX");
-                    targetCat["Diamond"] = targetArr;
-                }
-                Console.WriteLine("CACTUS_DIAMOND injected=" + (!has));
+                Console.WriteLine("CACTUS_DIAMOND added=" + added + " targets=" + targets.Count);
             }
             catch (Exception e) { Console.WriteLine("CACTUS_DIAMOND error " + e.Message); }
         }
@@ -172,7 +184,7 @@ namespace CactusTune
                     float sp = speedField != null ? Convert.ToSingle(speedField.GetValue(boxed)) : 0f;
                     if (len < 40f && sp < 40f) continue;
 
-                    const float factor = 0.2f;
+                    const float factor = 0.4f;
                     if (len > 1f) velField.SetValue(boxed, vel * factor);
                     if (speedField != null && sp > 1f) speedField.SetValue(boxed, sp * factor);
                     data.SetValue(boxed, idx);
