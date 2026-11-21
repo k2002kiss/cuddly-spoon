@@ -81,20 +81,13 @@ namespace CactusTune
             if (_shots.Contains(id)) return;
 
             Type type = shot.GetType();
-            object dmgObj = FindField(type, "damage")?.GetValue(shot);
-            double dmg = 0;
-            if (dmgObj is float f) dmg = f;
-            else if (dmgObj is double d) dmg = d;
-            else if (dmgObj is int i) dmg = i;
-            if (dmg < 5000) return;
-
             FieldInfo velField = FindField(type, "velocity");
             if (velField == null) return;
             Vector2 vel = (Vector2)velField.GetValue(shot);
             float len = vel.Length();
             if (len < 1f) return;
 
-            const float factor = 0.05f;
+            const float factor = 0.02f;
             vel *= factor;
             velField.SetValue(shot, vel);
 
@@ -106,7 +99,7 @@ namespace CactusTune
                 else if (sp is double sd) speedField.SetValue(shot, sd * factor);
             }
             _shots.Add(id);
-            Console.WriteLine("CACTUS_TUNE_SHOT " + id + " dmg=" + dmg + " speed=" + len);
+            Console.WriteLine("CACTUS_TUNE_SHOT " + id + " speed=" + len);
         }
 
         private static void SetDamage(object projectile, double value)
