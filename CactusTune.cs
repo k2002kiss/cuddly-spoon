@@ -11,6 +11,7 @@ namespace CactusTune
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
         private readonly HashSet<ulong> _plants = new HashSet<ulong>();
         private readonly HashSet<ulong> _shots = new HashSet<ulong>();
+        private static readonly HashSet<int> _catapultDone = new HashSet<int>();
         private readonly Dictionary<ulong, double> _next = new Dictionary<ulong, double>();
         private SceneTree _tree;
         private double _scanAt;
@@ -122,27 +123,37 @@ namespace CactusTune
                     if (boxed == null) continue;
                     Type bt = boxed.GetType();
                     object activeObj = FindField(bt, "active")?.GetValue(boxed);
-                    if (activeObj is bool act && !act) continue;
+                    if (activeObj is bool act && !act) { _catapultDone.Remove(idx); continue; }
                     object overObj = FindField(bt, "over")?.GetValue(boxed);
-                    if (overObj is bool ov && ov) continue;
+                    if (overObj is bool ov && ov) { _catapultDone.Remove(idx); continue; }
 
                     object ownerObj = FindField(bt, "fireCharacter")?.GetValue(boxed);
                     string ownerName = ownerObj != null ? ReadName(ReadConfig(ownerObj.GetType(), ownerObj)) : null;
                     if (ownerName != "CactusCannonX")
                     {
                         if (ownerObj != null) continue;
-                        object dd = FindField(bt, "damage")?.GetValue(boxed);
-                        double dv = dd != null ? Convert.ToDouble(dd) : 0;
-                        if (dv < 100000) continue;
+                        object cfg = FindField(bt, "config")?.GetValue(boxed);
+                        double bd = 0;
+                        if (cfg != null)
+                        {
+                            object b = FindField(cfg.GetType(), "baseDamage")?.GetValue(cfg);
+                            if (b != null) bd = Convert.ToDouble(b);
+                        }
+                        if (bd < 100000) continue;
                     }
 
                     object catOpenObj = FindField(bt, "catapultOpen")?.GetValue(boxed);
-                    if (catOpenObj is bool catOpen && catOpen)
+                    object catTimeObj = FindField(bt, "catapultTime")?.GetValue(boxed);
+                    bool isCatapult = (catOpenObj is bool co && co) || (catTimeObj != null && Convert.ToSingle(catTimeObj) > 0.01f);
+                    if (isCatapult)
                     {
-                        ScaleField(bt, boxed, "catapultTime", 5f);
-                        ScaleField(bt, boxed, "catapultTimer", 5f);
-                        data.SetValue(boxed, idx);
-                        Console.WriteLine("CACTUS_TUNE_CATAPULT idx=" + idx);
+                        if (_catapultDone.Add(idx))
+                        {
+                            ScaleField(bt, boxed, "catapultTime", 5f);
+                            ScaleField(bt, boxed, "catapultTimer", 5f);
+                            data.SetValue(boxed, idx);
+                            Console.WriteLine("CACTUS_TUNE_CATAPULT idx=" + idx);
+                        }
                         continue;
                     }
 
