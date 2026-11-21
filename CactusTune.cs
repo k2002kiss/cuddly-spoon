@@ -69,22 +69,33 @@ namespace CactusTune
                 object banksObj = rmType.GetProperty("TOWERDEFENSE_PACKETBANKS", Flags)?.GetValue(inst);
                 if (!(banksObj is Godot.Collections.Dictionary banks)) return;
 
-                int added = 0;
+                Godot.Collections.Dictionary targetCat = null;
+                Godot.Collections.Array targetArr = null;
                 foreach (var k in banks.Keys)
                 {
                     object bank = banks[k];
                     if (bank == null) continue;
                     object catObj = FindField(bank.GetType(), "category")?.GetValue(bank);
                     if (!(catObj is Godot.Collections.Dictionary cat)) continue;
-                    if (!cat.ContainsKey("Diamond")) continue;
-                    var arr = cat["Diamond"].AsGodotArray();
-                    bool has = false;
-                    foreach (var v in arr) if (v.AsString() == "CactusCannonX") { has = true; break; }
-                    if (!has) { arr.Add("CactusCannonX"); cat["Diamond"] = arr; added++; }
+                    if (!cat.ContainsKey("Gold")) continue;
+                    var arr = cat["Gold"].AsGodotArray();
+                    if (targetArr == null) { targetCat = cat; targetArr = arr; }
+                    bool hasOriginal = false;
+                    foreach (var v in arr) if (v.AsString() == "PlantCactusCannon") { hasOriginal = true; break; }
+                    if (hasOriginal) { targetCat = cat; targetArr = arr; break; }
                 }
-                Console.WriteLine("CACTUS_DIAMOND added=" + added);
+                if (targetArr == null) return;
+
+                for (int i = targetArr.Count - 1; i >= 0; i--)
+                    if (targetArr[i].AsString() == "CactusCannonX") targetArr.RemoveAt(i);
+
+                bool exists = false;
+                foreach (var v in targetArr) if (v.AsString() == "CactusCannonX") { exists = true; break; }
+                if (!exists) targetArr.Insert(0, "CactusCannonX");
+                targetCat["Gold"] = targetArr;
+                Console.WriteLine("CACTUS_GOLD coexist count=" + targetArr.Count);
             }
-            catch (Exception e) { Console.WriteLine("CACTUS_DIAMOND error " + e.Message); }
+            catch (Exception e) { Console.WriteLine("CACTUS_GOLD error " + e.Message); }
         }
 
         private static void ScaleField(Type type, object boxed, string name, float factor)
