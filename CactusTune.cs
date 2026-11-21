@@ -30,6 +30,7 @@ namespace CactusTune
                 if (_tree != null) _tree.ProcessFrame += OnFrame;
             }
             Console.WriteLine("CACTUS_TUNE_LOADED");
+            TryInjectGold();
         }
 
         public void Shutdown()
@@ -52,6 +53,36 @@ namespace CactusTune
             if (typeName == "TowerDefensePlantCactusCannon") TunePlant(node, now);
             else if (typeName == "TowerDefenseProjectile") TuneShot(node);
             foreach (Node child in node.GetChildren()) Walk(child, now);
+        }
+
+
+        private static void TryInjectGold()
+        {
+            try
+            {
+                Type asm = typeof(XWModRuntimeContext).Assembly.GetType("ResourceManager");
+                if (asm == null) { Console.WriteLine("CACTUS_GOLD no ResourceManager"); return; }
+                object inst = asm.GetProperty("Instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null);
+                if (inst == null) { Console.WriteLine("CACTUS_GOLD no instance"); return; }
+                object banksObj = asm.GetProperty("TOWERDEFENSE_PACKETBANKS", Flags | BindingFlags.Static)?.GetValue(inst);
+                if (!(banksObj is Godot.Collections.Dictionary banks)) { Console.WriteLine("CACTUS_GOLD no banks"); return; }
+                int added = 0;
+                foreach (var k in banks.Keys)
+                {
+                    object bank = banks[k];
+                    if (bank == null) continue;
+                    object catObj = FindField(bank.GetType(), "category")?.GetValue(bank);
+                    if (!(catObj is Godot.Collections.Dictionary cat)) continue;
+                    Godot.Collections.Array arr;
+                    if (cat.ContainsKey("Gold")) arr = cat["Gold"].AsGodotArray();
+                    else { arr = new Godot.Collections.Array(); cat["Gold"] = arr; }
+                    bool has = false;
+                    foreach (var v in arr) if (v.AsString() == "CactusCannonX") { has = true; break; }
+                    if (!has) { arr.Add("CactusCannonX"); added++; }
+                }
+                Console.WriteLine("CACTUS_GOLD added=" + added);
+            }
+            catch (Exception e) { Console.WriteLine("CACTUS_GOLD error " + e.Message); }
         }
 
         private void TunePlant(Node plant, double now)
