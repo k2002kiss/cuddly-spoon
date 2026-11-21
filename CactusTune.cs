@@ -9,7 +9,8 @@ namespace CactusTune
     public sealed class Entry : IXWModRuntimeEntry
     {
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-        private readonly HashSet<ulong> _done = new HashSet<ulong>();
+        private readonly HashSet<ulong> _plants = new HashSet<ulong>();
+        private readonly HashSet<ulong> _shots = new HashSet<ulong>();
         private readonly Dictionary<ulong, double> _next = new Dictionary<ulong, double>();
         private SceneTree _tree;
         private double _scanAt;
@@ -40,23 +41,25 @@ namespace CactusTune
         {
             double now = Time.GetTicksMsec() / 1000.0;
             if (now < _scanAt) return;
-            _scanAt = now + 0.1;
+            _scanAt = now + 0.05;
             if (_tree?.Root == null) return;
             Walk(_tree.Root, now);
         }
 
         private void Walk(Node node, double now)
         {
-            if (node.GetType().Name == "TowerDefensePlantCactusCannon") Tune(node, now);
+            string typeName = node.GetType().Name;
+            if (typeName == "TowerDefensePlantCactusCannon") TunePlant(node, now);
+            else if (typeName == "TowerDefenseProjectile") TuneShot(node);
             foreach (Node child in node.GetChildren()) Walk(child, now);
         }
 
-        private void Tune(Node plant, double now)
+        private void TunePlant(Node plant, double now)
         {
             ulong id = plant.GetInstanceId();
             Type type = plant.GetType();
 
-            if (_done.Add(id))
+            if (_plants.Add(id))
             {
                 SetDamage(FindField(type, "_shell")?.GetValue(plant), 200000.0);
                 SetDamage(FindField(type, "_spike")?.GetValue(plant), 10000.0);
@@ -68,8 +71,40 @@ namespace CactusTune
             {
                 FindField(type, "_mainReady")?.SetValue(plant, true);
                 FindField(type, "_firing")?.SetValue(plant, false);
-                _next[id] = now + 0.5;
+                _next[id] = now + 1.27;
             }
+        }
+
+        private void TuneShot(Node shot)
+        {
+            ulong id = shot.GetInstanceId();
+            if (_shots.Contains(id)) return;
+
+            Type type = shot.GetType();
+            object owner = FindField(type, "fireCharacter")?.GetValue(shot);
+            if (owner == null) return;
+            string ownerName = ReadName(ReadConfig(owner.GetType(), owner));
+            if (ownerName != "CactusCannonX") return;
+
+            FieldInfo velField = FindField(type, "velocity");
+            if (velField == null) return;
+            Vector2 vel = (Vector2)velField.GetValue(shot);
+            float len = vel.Length();
+            if (len < 1f) return;
+
+            float factor = len > 300f ? 0.4f : 0.3333f;
+            vel *= factor;
+            velField.SetValue(shot, vel);
+
+            FieldInfo speedField = FindField(type, "speed");
+            if (speedField != null)
+            {
+                object sp = speedField.GetValue(shot);
+                if (sp is float f) speedField.SetValue(shot, f * factor);
+                else if (sp is double d) speedField.SetValue(shot, d * factor);
+            }
+            _shots.Add(id);
+            Console.WriteLine("CACTUS_TUNE_SHOT " + id + " speed=" + len);
         }
 
         private static void SetDamage(object projectile, double value)
@@ -78,12 +113,47 @@ namespace CactusTune
             FindField(projectile.GetType(), "baseDamage")?.SetValue(projectile, value);
         }
 
+        private static object ReadConfig(Type type, object host)
+        {
+            object cfg = FindField(type, "_config")?.GetValue(host);
+            if (cfg == null)
+            {
+                PropertyInfo p = FindProperty(type, "config");
+                if (p != null) cfg = p.GetValue(host);
+            }
+            return cfg;
+        }
+
+        private static string ReadName(object cfg)
+        {
+            if (cfg == null) return null;
+            Type t = cfg.GetType();
+            object v = FindField(t, "name")?.GetValue(cfg);
+            if (v == null)
+            {
+                PropertyInfo p = FindProperty(t, "name");
+                if (p != null) v = p.GetValue(cfg);
+            }
+            return v as string;
+        }
+
         private static FieldInfo FindField(Type type, string name)
         {
             while (type != null)
             {
                 FieldInfo f = type.GetField(name, Flags);
                 if (f != null) return f;
+                type = type.BaseType;
+            }
+            return null;
+        }
+
+        private static PropertyInfo FindProperty(Type type, string name)
+        {
+            while (type != null)
+            {
+                PropertyInfo p = type.GetProperty(name, Flags);
+                if (p != null) return p;
                 type = type.BaseType;
             }
             return null;
