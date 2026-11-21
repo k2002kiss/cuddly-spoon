@@ -87,6 +87,15 @@ namespace CactusTune
         }
 
 
+        private static void ScaleField(Type type, object boxed, string name, float factor)
+        {
+            FieldInfo f = FindField(type, name);
+            if (f == null) return;
+            object v = f.GetValue(boxed);
+            if (v is float fl) f.SetValue(boxed, fl * factor);
+            else if (v is double db) f.SetValue(boxed, db * factor);
+        }
+
         private static void TrySlowBullets()
         {
             try
@@ -117,19 +126,20 @@ namespace CactusTune
                     object overObj = FindField(bt, "over")?.GetValue(boxed);
                     if (overObj is bool ov && ov) continue;
 
-                    double dmg = 0;
-                    object dmgObj = FindField(bt, "damage")?.GetValue(boxed);
-                    if (dmgObj != null) dmg = Convert.ToDouble(dmgObj);
-                    if (dmg < 5000)
+                    object ownerObj = FindField(bt, "fireCharacter")?.GetValue(boxed);
+                    if (ownerObj == null) continue;
+                    string ownerName = ReadName(ReadConfig(ownerObj.GetType(), ownerObj));
+                    if (ownerName != "CactusCannonX") continue;
+
+                    object catOpenObj = FindField(bt, "catapultOpen")?.GetValue(boxed);
+                    if (catOpenObj is bool catOpen && catOpen)
                     {
-                        object cfg = FindField(bt, "config")?.GetValue(boxed);
-                        if (cfg != null)
-                        {
-                            object bd = FindField(cfg.GetType(), "baseDamage")?.GetValue(cfg);
-                            if (bd != null) dmg = Convert.ToDouble(bd);
-                        }
+                        ScaleField(bt, boxed, "catapultTime", 5f);
+                        ScaleField(bt, boxed, "catapultTimer", 5f);
+                        data.SetValue(boxed, idx);
+                        Console.WriteLine("CACTUS_TUNE_CATAPULT idx=" + idx);
+                        continue;
                     }
-                    if (dmg < 5000) continue;
 
                     FieldInfo velField = FindField(bt, "vel");
                     FieldInfo speedField = FindField(bt, "speed");
