@@ -12,6 +12,9 @@ jobs:
       - name: unzip source
         run: unzip -o cactus-tune-src.zip -d .
 
+      - name: apply latest source
+        run: cp CactusTune.cs src/CactusTune.cs
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
