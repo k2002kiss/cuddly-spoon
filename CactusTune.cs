@@ -23,6 +23,11 @@ namespace CactusTune
 
         public void OnAllModsLoaded()
         {
+            if (_tree == null)
+            {
+                _tree = Engine.GetMainLoop() as SceneTree;
+                if (_tree != null) _tree.ProcessFrame += OnFrame;
+            }
             Console.WriteLine("CACTUS_TUNE_LOADED");
         }
 
@@ -56,10 +61,10 @@ namespace CactusTune
 
             if (_tuned.Add(id))
             {
-                object shell = type.GetField("_shell", Flags)?.GetValue(plant);
+                object shell = FindField(type, "_shell")?.GetValue(plant);
                 if (shell != null)
                 {
-                    FieldInfo dmg = shell.GetType().GetField("baseDamage", Flags);
+                    FieldInfo dmg = FindField(shell.GetType(), "baseDamage");
                     if (dmg != null) dmg.SetValue(shell, 10000.0);
                 }
                 Console.WriteLine("CACTUS_TUNE_APPLY " + id);
@@ -67,17 +72,17 @@ namespace CactusTune
 
             if (!_next.TryGetValue(id, out double next) || now >= next)
             {
-                type.GetField("_mainReady", Flags)?.SetValue(plant, true);
+                FindField(type, "_mainReady")?.SetValue(plant, true);
                 _next[id] = now + 0.5;
             }
         }
 
         private static object ReadConfig(Type type, object plant)
         {
-            object cfg = type.GetField("_config", Flags)?.GetValue(plant);
+            object cfg = FindField(type, "_config")?.GetValue(plant);
             if (cfg == null)
             {
-                PropertyInfo p = type.GetProperty("config", Flags);
+                PropertyInfo p = FindProperty(type, "config");
                 if (p != null) cfg = p.GetValue(plant);
             }
             return cfg;
@@ -87,13 +92,35 @@ namespace CactusTune
         {
             if (cfg == null) return null;
             Type t = cfg.GetType();
-            object v = t.GetField("name", Flags)?.GetValue(cfg);
+            object v = FindField(t, "name")?.GetValue(cfg);
             if (v == null)
             {
-                PropertyInfo p = t.GetProperty("name", Flags);
+                PropertyInfo p = FindProperty(t, "name");
                 if (p != null) v = p.GetValue(cfg);
             }
             return v as string;
+        }
+
+        private static FieldInfo FindField(Type type, string name)
+        {
+            while (type != null)
+            {
+                FieldInfo f = type.GetField(name, Flags);
+                if (f != null) return f;
+                type = type.BaseType;
+            }
+            return null;
+        }
+
+        private static PropertyInfo FindProperty(Type type, string name)
+        {
+            while (type != null)
+            {
+                PropertyInfo p = type.GetProperty(name, Flags);
+                if (p != null) return p;
+                type = type.BaseType;
+            }
+            return null;
         }
     }
 }
