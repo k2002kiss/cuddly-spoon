@@ -92,7 +92,7 @@ namespace CactusTune
             float len = vel.Length();
             if (len < 1f) return;
 
-            float factor = len > 300f ? 0.4f : 0.3333f;
+            float factor = len > 300f ? 0.2f : 0.16667f;
             vel *= factor;
             velField.SetValue(shot, vel);
 
