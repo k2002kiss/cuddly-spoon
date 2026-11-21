@@ -45,6 +45,7 @@ namespace CactusTune
             _scanAt = now + 0.05;
             if (_tree?.Root == null) return;
             Walk(_tree.Root, now);
+            TrySlowBullets();
         }
 
         private void Walk(Node node, double now)
@@ -83,6 +84,54 @@ namespace CactusTune
                 Console.WriteLine("CACTUS_GOLD added=" + added);
             }
             catch (Exception e) { Console.WriteLine("CACTUS_GOLD error " + e.Message); }
+        }
+
+
+        private static void TrySlowBullets()
+        {
+            try
+            {
+                Type asm = typeof(XWModRuntimeContext).Assembly.GetType("BulletField");
+                if (asm == null) return;
+                object inst = asm.GetProperty("Instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null);
+                if (inst == null) return;
+                FieldInfo dataField = FindField(asm, "_data");
+                FieldInfo idxField = FindField(asm, "_activeIndices");
+                FieldInfo cntField = FindField(asm, "_activeCount");
+                if (dataField == null || idxField == null || cntField == null) return;
+                if (!(dataField.GetValue(inst) is Array data)) return;
+                object idxObj = idxField.GetValue(inst);
+                int count = Convert.ToInt32(cntField.GetValue(inst));
+                for (int i = 0; i < count; i++)
+                {
+                    int idx;
+                    if (idxObj is Array ia) idx = Convert.ToInt32(ia.GetValue(i));
+                    else if (idxObj is System.Collections.IList il) idx = Convert.ToInt32(il[i]);
+                    else break;
+                    if (idx < 0 || idx >= data.Length) continue;
+                    object boxed = data.GetValue(idx);
+                    if (boxed == null) continue;
+                    Type bt = boxed.GetType();
+                    object activeObj = FindField(bt, "active")?.GetValue(boxed);
+                    if (activeObj is bool act && !act) continue;
+                    object overObj = FindField(bt, "over")?.GetValue(boxed);
+                    if (overObj is bool ov && ov) continue;
+
+                    FieldInfo speedField = FindField(bt, "speed");
+                    FieldInfo velField = FindField(bt, "vel");
+                    if (speedField == null || velField == null) continue;
+                    float speed = Convert.ToSingle(speedField.GetValue(boxed));
+                    if (speed < 20f || speed > 1000f) continue;
+
+                    Vector2 vel = (Vector2)velField.GetValue(boxed);
+                    const float factor = 0.05f;
+                    speedField.SetValue(boxed, speed * factor);
+                    velField.SetValue(boxed, vel * factor);
+                    data.SetValue(boxed, idx);
+                    Console.WriteLine("CACTUS_TUNE_BULLET idx=" + idx + " speed=" + speed);
+                }
+            }
+            catch (Exception e) { Console.WriteLine("CACTUS_TUNE_BULLET_ERR " + e.Message); }
         }
 
         private void TunePlant(Node plant, double now)
