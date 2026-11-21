@@ -127,9 +127,14 @@ namespace CactusTune
                     if (overObj is bool ov && ov) continue;
 
                     object ownerObj = FindField(bt, "fireCharacter")?.GetValue(boxed);
-                    if (ownerObj == null) continue;
-                    string ownerName = ReadName(ReadConfig(ownerObj.GetType(), ownerObj));
-                    if (ownerName != "CactusCannonX") continue;
+                    string ownerName = ownerObj != null ? ReadName(ReadConfig(ownerObj.GetType(), ownerObj)) : null;
+                    if (ownerName != "CactusCannonX")
+                    {
+                        if (ownerObj != null) continue;
+                        object dd = FindField(bt, "damage")?.GetValue(boxed);
+                        double dv = dd != null ? Convert.ToDouble(dd) : 0;
+                        if (dv < 100000) continue;
+                    }
 
                     object catOpenObj = FindField(bt, "catapultOpen")?.GetValue(boxed);
                     if (catOpenObj is bool catOpen && catOpen)
