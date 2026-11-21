@@ -153,7 +153,7 @@ namespace CactusTune
                     if (len > 1f) velField.SetValue(boxed, vel * factor);
                     if (speedField != null && sp > 1f) speedField.SetValue(boxed, sp * factor);
                     data.SetValue(boxed, idx);
-                    Console.WriteLine("CACTUS_TUNE_BULLET idx=" + idx + " dmg=" + dmg + " len=" + len + " sp=" + sp);
+                    Console.WriteLine("CACTUS_TUNE_BULLET idx=" + idx + " len=" + len + " sp=" + sp);
                 }
             }
             catch (Exception e) { Console.WriteLine("CACTUS_TUNE_BULLET_ERR " + e.Message); }
