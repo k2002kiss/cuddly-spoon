@@ -117,18 +117,36 @@ namespace CactusTune
                     object overObj = FindField(bt, "over")?.GetValue(boxed);
                     if (overObj is bool ov && ov) continue;
 
-                    FieldInfo speedField = FindField(bt, "speed");
-                    FieldInfo velField = FindField(bt, "vel");
-                    if (speedField == null || velField == null) continue;
-                    float speed = Convert.ToSingle(speedField.GetValue(boxed));
-                    if (speed < 20f || speed > 1000f) continue;
+                    double dmg = 0;
+                    object dmgObj = FindField(bt, "damage")?.GetValue(boxed);
+                    if (dmgObj != null) dmg = Convert.ToDouble(dmgObj);
+                    if (dmg < 5000)
+                    {
+                        object cfg = FindField(bt, "config")?.GetValue(boxed);
+                        if (cfg != null)
+                        {
+                            object bd = FindField(cfg.GetType(), "baseDamage")?.GetValue(cfg);
+                            if (bd != null) dmg = Convert.ToDouble(bd);
+                        }
+                    }
+                    if (dmg < 5000) continue;
 
+                    FieldInfo velField = FindField(bt, "vel");
+                    if (velField == null) continue;
                     Vector2 vel = (Vector2)velField.GetValue(boxed);
+                    float len = vel.Length();
+                    if (len < 40f) continue;
+
                     const float factor = 0.05f;
-                    speedField.SetValue(boxed, speed * factor);
                     velField.SetValue(boxed, vel * factor);
+                    FieldInfo speedField = FindField(bt, "speed");
+                    if (speedField != null)
+                    {
+                        float sp = Convert.ToSingle(speedField.GetValue(boxed));
+                        if (sp > 1f) speedField.SetValue(boxed, sp * factor);
+                    }
                     data.SetValue(boxed, idx);
-                    Console.WriteLine("CACTUS_TUNE_BULLET idx=" + idx + " speed=" + speed);
+                    Console.WriteLine("CACTUS_TUNE_BULLET idx=" + idx + " dmg=" + dmg + " len=" + len);
                 }
             }
             catch (Exception e) { Console.WriteLine("CACTUS_TUNE_BULLET_ERR " + e.Message); }
