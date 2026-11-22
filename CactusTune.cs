@@ -59,7 +59,7 @@ namespace DamageNumbers
 
         private void Scan(Node node)
         {
-            if (node is Node2D n2)
+            if (node is Node2D n2 && node.GetType().Name.Contains("Zombie"))
             {
                 object inst = FindField(node.GetType(), "instance")?.GetValue(node);
                 if (inst != null)
