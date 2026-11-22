@@ -4,124 +4,80 @@ using System.Reflection;
 using Godot;
 using PVZHE.ModEditor.ModSystem;
 
-namespace DamageNumbers
+namespace WmcqArt
 {
     public sealed class Entry : IXWModRuntimeEntry
     {
-        private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        private object _inner;
+        private Type _innerType;
         private SceneTree _tree;
-        private CanvasLayer _layer;
-        private double _scanAt;
-        private readonly Dictionary<ulong, double> _hp = new Dictionary<ulong, double>();
-        private readonly List<(Label label, double start, Vector2 pos)> _labels = new List<(Label, double, Vector2)>();
+        private Texture2D _tex;
+        private readonly HashSet<ulong> _done = new HashSet<ulong>();
 
         public void Initialize(XWModRuntimeContext context)
         {
-            _tree = Engine.GetMainLoop() as SceneTree;
-            if (_tree != null) _tree.ProcessFrame += OnFrame;
-            Console.WriteLine("DAMAGE_NUM_INIT");
+            try
+            {
+                byte[] bytes = FileAccess.GetFileAsBytes("res://Runtime/WMCQImpl.dll");
+                Assembly asm = Assembly.Load(bytes);
+                _innerType = asm.GetType("WmcqGoldCardPoolRuntimeEntryXXXXXXXX");
+                if (_innerType != null)
+                {
+                    _inner = Activator.CreateInstance(_innerType);
+                    _innerType.GetMethod("Initialize", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.Invoke(_inner, new object[] { context });
+                }
+                Console.WriteLine("WMCQ_ART_INIT inner=" + (_inner != null));
+            }
+            catch (Exception e) { Console.WriteLine("WMCQ_ART_INIT_ERR " + e); }
         }
 
         public void OnAllModsLoaded()
         {
-            if (_tree == null)
-            {
-                _tree = Engine.GetMainLoop() as SceneTree;
-                if (_tree != null) _tree.ProcessFrame += OnFrame;
-            }
-            Console.WriteLine("DAMAGE_NUM_LOADED");
+            try { _innerType?.GetMethod("OnAllModsLoaded", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.Invoke(_inner, null); }
+            catch (Exception e) { Console.WriteLine("WMCQ_ART_ALL_ERR " + e); }
+            _tree = Engine.GetMainLoop() as SceneTree;
+            if (_tree != null) _tree.ProcessFrame += OnFrame;
+            LoadTexture();
+            Console.WriteLine("WMCQ_ART_LOADED");
         }
 
         public void Shutdown()
         {
             if (_tree != null) _tree.ProcessFrame -= OnFrame;
+            try { _innerType?.GetMethod("Shutdown", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.Invoke(_inner, null); } catch { }
+        }
+
+        private void LoadTexture()
+        {
+            try
+            {
+                byte[] png = FileAccess.GetFileAsBytes("res://Resources/Characters/Plants/WMCQ/Sprite/WMCQ_body.png");
+                var img = new Image();
+                img.LoadPngFromBuffer(png);
+                _tex = ImageTexture.CreateFromImage(img);
+                Console.WriteLine("WMCQ_ART_TEX " + img.GetWidth() + "x" + img.GetHeight());
+            }
+            catch (Exception e) { Console.WriteLine("WMCQ_ART_TEX_ERR " + e.Message); }
         }
 
         private void OnFrame()
         {
-            double now = Time.GetTicksMsec() / 1000.0;
-            if (now < _scanAt) return;
-            _scanAt = now + 0.1;
-            if (_tree == null) return;
-            Node scene = _tree.CurrentScene;
-            if (scene == null) return;
-            EnsureUi(scene);
-            Scan(scene);
-            TickLabels(now);
+            if (_tree?.CurrentScene == null || _tex == null) return;
+            Walk(_tree.CurrentScene);
         }
 
-        private void EnsureUi(Node scene)
+        private void Walk(Node node)
         {
-            if (_layer != null && GodotObject.IsInstanceValid(_layer) && _layer.IsInsideTree()) return;
-            _layer = new CanvasLayer { Layer = 100 };
-            scene.AddChild(_layer);
-        }
-
-        private void Scan(Node node)
-        {
-            if (node is Node2D n2)
+            if (node is Sprite2D sp && sp.Name == "Body")
             {
-                object inst = FindField(node.GetType(), "instance")?.GetValue(node);
-                if (inst != null)
+                ulong id = sp.GetInstanceId();
+                if (!_done.Contains(id) && sp.Texture == null)
                 {
-                    object hpObj = FindField(inst.GetType(), "hitpoints")?.GetValue(inst);
-                    if (hpObj != null)
-                    {
-                        double hp = Convert.ToDouble(hpObj);
-                                    ulong id = node.GetInstanceId();
-                        if (_hp.TryGetValue(id, out double old))
-                        {
-                            double diff = old - hp;
-                            bool isZombie = node.GetType().Name.Contains("Zombie");
-                            if (diff > 0.5 && isZombie) Show(n2, "-" + Math.Round(diff), new Color(1, 1, 1));
-                            else if (diff < -0.5 && !isZombie) Show(n2, "+" + Math.Round(-diff), new Color(0.4f, 1, 0.4f));
-                        }
-                        _hp[id] = hp;
-                    }
+                    sp.Texture = _tex;
+                    _done.Add(id);
                 }
             }
-            foreach (Node child in node.GetChildren()) Scan(child);
-        }
-
-        private void Show(Node2D target, string text, Color color)
-        {
-            if (_layer == null) return;
-            var label = new Label { Text = text, Modulate = color, ZIndex = 300 };
-            label.AddThemeFontSizeOverride("font_size", 22);
-            label.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.85f));
-            label.AddThemeConstantOverride("outline_size", 4);
-            Vector2 pos = target.GetGlobalTransformWithCanvas().Origin + new Vector2(-10, -70);
-            label.Position = pos;
-            _layer.AddChild(label);
-            _labels.Add((label, Time.GetTicksMsec() / 1000.0, pos));
-        }
-
-        private void TickLabels(double now)
-        {
-            for (int i = _labels.Count - 1; i >= 0; i--)
-            {
-                var item = _labels[i];
-                double t = now - item.start;
-                if (t >= 0.9 || !GodotObject.IsInstanceValid(item.label))
-                {
-                    if (GodotObject.IsInstanceValid(item.label)) item.label.QueueFree();
-                    _labels.RemoveAt(i);
-                    continue;
-                }
-                item.label.Position = item.pos + new Vector2(0, (float)(-40 * t));
-                item.label.Modulate = new Color(item.label.Modulate.R, item.label.Modulate.G, item.label.Modulate.B, (float)(1 - t / 0.9));
-            }
-        }
-
-        private static FieldInfo FindField(Type type, string name)
-        {
-            while (type != null)
-            {
-                FieldInfo f = type.GetField(name, Flags);
-                if (f != null) return f;
-                type = type.BaseType;
-            }
-            return null;
+            foreach (Node child in node.GetChildren()) Walk(child);
         }
     }
 }
