@@ -29,6 +29,7 @@ namespace MagicPillar
                 if (_tree != null) _tree.ProcessFrame += OnFrame;
             }
             Console.WriteLine("MAGIC_PILLAR_LOADED");
+            SpawnPillar(new Vector2(640, 360));
         }
 
         public void Shutdown()
