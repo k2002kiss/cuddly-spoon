@@ -11,10 +11,7 @@ namespace DamageNumbers
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
         private SceneTree _tree;
         private CanvasLayer _layer;
-        private Label _debug;
         private double _scanAt;
-        private int _count;
-        private string _sample;
         private readonly Dictionary<ulong, double> _hp = new Dictionary<ulong, double>();
         private readonly List<(Label label, double start, Vector2 pos)> _labels = new List<(Label, double, Vector2)>();
 
@@ -49,9 +46,7 @@ namespace DamageNumbers
             Node scene = _tree.CurrentScene;
             if (scene == null) return;
             EnsureUi(scene);
-            _count = 0; _sample = null;
             Scan(scene);
-            UpdateDebug();
             TickLabels(now);
         }
 
@@ -60,11 +55,6 @@ namespace DamageNumbers
             if (_layer != null && GodotObject.IsInstanceValid(_layer) && _layer.IsInsideTree()) return;
             _layer = new CanvasLayer { Layer = 100 };
             scene.AddChild(_layer);
-            _debug = new Label { Position = new Vector2(12, 80), ZIndex = 200 };
-            _debug.AddThemeFontSizeOverride("font_size", 18);
-            _debug.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0));
-            _debug.AddThemeConstantOverride("outline_size", 4);
-            _layer.AddChild(_debug);
         }
 
         private void Scan(Node node)
@@ -78,9 +68,7 @@ namespace DamageNumbers
                     if (hpObj != null)
                     {
                         double hp = Convert.ToDouble(hpObj);
-                        _count++;
-                        if (_sample == null) _sample = node.GetType().Name + ":" + hp;
-                        ulong id = node.GetInstanceId();
+                                    ulong id = node.GetInstanceId();
                         if (_hp.TryGetValue(id, out double old))
                         {
                             double diff = old - hp;
@@ -122,12 +110,6 @@ namespace DamageNumbers
                 item.label.Position = item.pos + new Vector2(0, (float)(-40 * t));
                 item.label.Modulate = new Color(item.label.Modulate.R, item.label.Modulate.G, item.label.Modulate.B, (float)(1 - t / 0.9));
             }
-        }
-
-        private void UpdateDebug()
-        {
-            if (_debug == null || !GodotObject.IsInstanceValid(_debug)) return;
-            _debug.Text = "HP nodes: " + _count + "  " + (_sample ?? "");
         }
 
         private static FieldInfo FindField(Type type, string name)
