@@ -4,23 +4,21 @@ using System.Reflection;
 using Godot;
 using PVZHE.ModEditor.ModSystem;
 
-namespace CactusTune
+namespace MagicPillar
 {
     public sealed class Entry : IXWModRuntimeEntry
     {
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-        private readonly HashSet<ulong> _plants = new HashSet<ulong>();
-        private readonly HashSet<ulong> _shots = new HashSet<ulong>();
-        private static readonly HashSet<int> _catapultDone = new HashSet<int>();
-        private readonly Dictionary<ulong, double> _next = new Dictionary<ulong, double>();
         private SceneTree _tree;
         private double _scanAt;
+        private readonly Dictionary<int, Vector2> _seen = new Dictionary<int, Vector2>();
+        private readonly List<(Sprite2D glow, Sprite2D core, double end)> _pillars = new List<(Sprite2D, Sprite2D, double)>();
 
         public void Initialize(XWModRuntimeContext context)
         {
             _tree = Engine.GetMainLoop() as SceneTree;
             if (_tree != null) _tree.ProcessFrame += OnFrame;
-            Console.WriteLine("CACTUS_TUNE_INIT api=" + context.ApiVersion);
+            Console.WriteLine("MAGIC_PILLAR_INIT");
         }
 
         public void OnAllModsLoaded()
@@ -30,8 +28,7 @@ namespace CactusTune
                 _tree = Engine.GetMainLoop() as SceneTree;
                 if (_tree != null) _tree.ProcessFrame += OnFrame;
             }
-            Console.WriteLine("CACTUS_TUNE_LOADED");
-            TryInjectGold();
+            Console.WriteLine("MAGIC_PILLAR_LOADED");
         }
 
         public void Shutdown()
@@ -45,83 +42,28 @@ namespace CactusTune
             if (now < _scanAt) return;
             _scanAt = now + 0.05;
             if (_tree?.Root == null) return;
-            Walk(_tree.Root, now);
-            TrySlowBullets();
+
+            ScanBullets();
+            CleanPillars(now);
         }
 
-        private void Walk(Node node, double now)
-        {
-            string typeName = node.GetType().Name;
-            if (typeName == "TowerDefensePlantCactusCannon") TunePlant(node, now);
-            else if (typeName == "TowerDefenseProjectile") TuneShot(node);
-            foreach (Node child in node.GetChildren()) Walk(child, now);
-        }
-
-
-        private static void TryInjectGold()
+        private void ScanBullets()
         {
             try
             {
-                Type rmType = typeof(XWModRuntimeContext).Assembly.GetType("ResourceManager");
-                if (rmType == null) return;
-                object inst = rmType.GetProperty("Instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null);
+                Type bfType = typeof(XWModRuntimeContext).Assembly.GetType("BulletField");
+                if (bfType == null) return;
+                object inst = bfType.GetProperty("Instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null);
                 if (inst == null) return;
-                object banksObj = rmType.GetProperty("TOWERDEFENSE_PACKETBANKS", Flags)?.GetValue(inst);
-                if (!(banksObj is Godot.Collections.Dictionary banks)) return;
-
-                Godot.Collections.Dictionary targetCat = null;
-                Godot.Collections.Array targetArr = null;
-                foreach (var k in banks.Keys)
-                {
-                    object bank = banks[k];
-                    if (bank == null) continue;
-                    object catObj = FindField(bank.GetType(), "category")?.GetValue(bank);
-                    if (!(catObj is Godot.Collections.Dictionary cat)) continue;
-                    if (!cat.ContainsKey("Gold")) continue;
-                    var arr = cat["Gold"].AsGodotArray();
-                    if (targetArr == null) { targetCat = cat; targetArr = arr; }
-                    bool hasOriginal = false;
-                    foreach (var v in arr) if (v.AsString() == "PlantCactusCannon") { hasOriginal = true; break; }
-                    if (hasOriginal) { targetCat = cat; targetArr = arr; break; }
-                }
-                if (targetArr == null) return;
-
-                for (int i = targetArr.Count - 1; i >= 0; i--)
-                    if (targetArr[i].AsString() == "CactusCannonX") targetArr.RemoveAt(i);
-
-                bool exists = false;
-                foreach (var v in targetArr) if (v.AsString() == "CactusCannonX") { exists = true; break; }
-                if (!exists) targetArr.Insert(0, "CactusCannonX");
-                targetCat["Gold"] = targetArr;
-                Console.WriteLine("CACTUS_GOLD coexist count=" + targetArr.Count);
-            }
-            catch (Exception e) { Console.WriteLine("CACTUS_GOLD error " + e.Message); }
-        }
-
-        private static void ScaleField(Type type, object boxed, string name, float factor)
-        {
-            FieldInfo f = FindField(type, name);
-            if (f == null) return;
-            object v = f.GetValue(boxed);
-            if (v is float fl) f.SetValue(boxed, fl * factor);
-            else if (v is double db) f.SetValue(boxed, db * factor);
-        }
-
-        private static void TrySlowBullets()
-        {
-            try
-            {
-                Type asm = typeof(XWModRuntimeContext).Assembly.GetType("BulletField");
-                if (asm == null) return;
-                object inst = asm.GetProperty("Instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null);
-                if (inst == null) return;
-                FieldInfo dataField = FindField(asm, "_data");
-                FieldInfo idxField = FindField(asm, "_activeIndices");
-                FieldInfo cntField = FindField(asm, "_activeCount");
+                FieldInfo dataField = FindField(bfType, "_data");
+                FieldInfo idxField = FindField(bfType, "_activeIndices");
+                FieldInfo cntField = FindField(bfType, "_activeCount");
                 if (dataField == null || idxField == null || cntField == null) return;
                 if (!(dataField.GetValue(inst) is Array data)) return;
                 object idxObj = idxField.GetValue(inst);
                 int count = Convert.ToInt32(cntField.GetValue(inst));
+                var active = new HashSet<int>();
+
                 for (int i = 0; i < count; i++)
                 {
                     int idx;
@@ -133,135 +75,95 @@ namespace CactusTune
                     if (boxed == null) continue;
                     Type bt = boxed.GetType();
                     object activeObj = FindField(bt, "active")?.GetValue(boxed);
-                    if (activeObj is bool act && !act) { _catapultDone.Remove(idx); continue; }
+                    if (activeObj is bool act && !act) continue;
                     object overObj = FindField(bt, "over")?.GetValue(boxed);
-                    if (overObj is bool ov && ov) { _catapultDone.Remove(idx); continue; }
+                    if (overObj is bool ov && ov) continue;
 
-                    object ownerObj = FindField(bt, "fireCharacter")?.GetValue(boxed);
-                    string ownerName = ownerObj != null ? ReadName(ReadConfig(ownerObj.GetType(), ownerObj)) : null;
-                    if (ownerName != "CactusCannonX")
+                    object cfg = FindField(bt, "config")?.GetValue(boxed);
+                    string name = cfg != null ? FindField(cfg.GetType(), "name")?.GetValue(cfg) as string : null;
+                    if (name != "MagicLaser") continue;
+
+                    object posObj = FindField(bt, "pos")?.GetValue(boxed);
+                    if (posObj is Vector2 pos)
                     {
-                        if (ownerObj != null) continue;
-                        object cfg = FindField(bt, "config")?.GetValue(boxed);
-                        double bd = 0;
-                        if (cfg != null)
-                        {
-                            object b = FindField(cfg.GetType(), "baseDamage")?.GetValue(cfg);
-                            if (b != null) bd = Convert.ToDouble(b);
-                        }
-                        if (bd < 100000) continue;
+                        _seen[idx] = pos;
+                        active.Add(idx);
                     }
+                }
 
-                    object catOpenObj = FindField(bt, "catapultOpen")?.GetValue(boxed);
-                    object catTimeObj = FindField(bt, "catapultTime")?.GetValue(boxed);
-                    bool isCatapult = (catOpenObj is bool co && co) || (catTimeObj != null && Convert.ToSingle(catTimeObj) > 0.01f);
-                    if (isCatapult)
-                    {
-                        if (_catapultDone.Add(idx))
-                        {
-                            ScaleField(bt, boxed, "catapultTime", 5f);
-                            ScaleField(bt, boxed, "catapultTimer", 5f);
-                            data.SetValue(boxed, idx);
-                            Console.WriteLine("CACTUS_TUNE_CATAPULT idx=" + idx);
-                        }
-                        continue;
-                    }
-
-                    FieldInfo velField = FindField(bt, "vel");
-                    FieldInfo speedField = FindField(bt, "speed");
-                    if (velField == null) continue;
-                    Vector2 vel = (Vector2)velField.GetValue(boxed);
-                    float len = vel.Length();
-                    float sp = speedField != null ? Convert.ToSingle(speedField.GetValue(boxed)) : 0f;
-                    if (len < 40f && sp < 40f) continue;
-
-                    const float factor = 0.8f;
-                    if (len > 1f) velField.SetValue(boxed, vel * factor);
-                    if (speedField != null && sp > 1f) speedField.SetValue(boxed, sp * factor);
-                    data.SetValue(boxed, idx);
-                    Console.WriteLine("CACTUS_TUNE_BULLET idx=" + idx + " len=" + len + " sp=" + sp);
+                var gone = new List<int>();
+                foreach (var kv in _seen)
+                {
+                    if (!active.Contains(kv.Key)) gone.Add(kv.Key);
+                }
+                foreach (int idx in gone)
+                {
+                    Vector2 pos = _seen[idx];
+                    _seen.Remove(idx);
+                    SpawnPillar(pos);
                 }
             }
-            catch (Exception e) { Console.WriteLine("CACTUS_TUNE_BULLET_ERR " + e.Message); }
+            catch (Exception e) { Console.WriteLine("MAGIC_PILLAR_ERR " + e.Message); }
         }
 
-        private void TunePlant(Node plant, double now)
+        private void SpawnPillar(Vector2 pos)
         {
-            ulong id = plant.GetInstanceId();
-            Type type = plant.GetType();
-
-            if (_plants.Add(id))
-            {
-                SetDamage(FindField(type, "_shell")?.GetValue(plant), 200000.0);
-                SetDamage(FindField(type, "_spike")?.GetValue(plant), 10000.0);
-                SetDamage(FindField(type, "_droneSpike")?.GetValue(plant), 10000.0);
-                Console.WriteLine("CACTUS_TUNE_APPLY " + id);
-            }
-
-            if (!_next.TryGetValue(id, out double next) || now >= next)
-            {
-                FindField(type, "_mainReady")?.SetValue(plant, true);
-                FindField(type, "_firing")?.SetValue(plant, false);
-                _next[id] = now + 1.27;
-            }
+            if (_tree?.Root == null) return;
+            var material = new CanvasItemMaterial { BlendMode = CanvasItemMaterial.BlendModeEnum.Add };
+            var glow = MakeSprite(material, new Color(1f, 0.35f, 0.8f, 0.35f), new Vector2(1.6f, 2.6f));
+            var core = MakeSprite(material, new Color(1f, 0.85f, 0.95f, 0.95f), new Vector2(0.9f, 2.2f));
+            glow.GlobalPosition = pos;
+            core.GlobalPosition = pos;
+            _tree.Root.AddChild(glow);
+            _tree.Root.AddChild(core);
+            _pillars.Add((glow, core, Time.GetTicksMsec() / 1000.0 + 2.0));
+            Console.WriteLine("MAGIC_PILLAR_SPAWN");
         }
 
-        private void TuneShot(Node shot)
+        private static Sprite2D MakeSprite(CanvasItemMaterial material, Color color, Vector2 scale)
         {
-            ulong id = shot.GetInstanceId();
-            if (_shots.Contains(id)) return;
-
-            Type type = shot.GetType();
-            FieldInfo velField = FindField(type, "velocity");
-            if (velField == null) return;
-            Vector2 vel = (Vector2)velField.GetValue(shot);
-            float len = vel.Length();
-            if (len < 1f) return;
-
-            const float factor = 0.02f;
-            vel *= factor;
-            velField.SetValue(shot, vel);
-
-            FieldInfo speedField = FindField(type, "speed");
-            if (speedField != null)
+            var gradient = new Gradient();
+            gradient.SetOffsets(new[] { 0f, 0.25f, 0.55f, 0.8f, 1f });
+            gradient.SetColors(new[]
             {
-                object sp = speedField.GetValue(shot);
-                if (sp is float sf) speedField.SetValue(shot, sf * factor);
-                else if (sp is double sd) speedField.SetValue(shot, sd * factor);
-            }
-            _shots.Add(id);
-            Console.WriteLine("CACTUS_TUNE_SHOT " + id + " speed=" + len);
-        }
-
-        private static void SetDamage(object projectile, double value)
-        {
-            if (projectile == null) return;
-            FindField(projectile.GetType(), "baseDamage")?.SetValue(projectile, value);
-        }
-
-        private static object ReadConfig(Type type, object host)
-        {
-            object cfg = FindField(type, "_config")?.GetValue(host);
-            if (cfg == null)
+                new Color(1f, 0.2f, 0.6f, 0f),
+                new Color(1f, 0.35f, 0.75f, 1f),
+                new Color(1f, 0.75f, 0.9f, 1f),
+                new Color(1f, 0.55f, 0.85f, 1f),
+                new Color(1f, 0.2f, 0.6f, 0f),
+            });
+            var tex = new GradientTexture2D
             {
-                PropertyInfo p = FindProperty(type, "config");
-                if (p != null) cfg = p.GetValue(host);
-            }
-            return cfg;
+                Gradient = gradient,
+                Width = 32,
+                Height = 128,
+                Fill = GradientTexture2D.FillEnum.Radial,
+                FillFrom = new Vector2(0.5f, 0.5f),
+                FillTo = new Vector2(1f, 0.5f),
+            };
+            return new Sprite2D
+            {
+                Material = material,
+                Modulate = color,
+                Texture = tex,
+                Scale = scale,
+                ZIndex = 20,
+            };
         }
 
-        private static string ReadName(object cfg)
+        private void CleanPillars(double now)
         {
-            if (cfg == null) return null;
-            Type t = cfg.GetType();
-            object v = FindField(t, "name")?.GetValue(cfg);
-            if (v == null)
+            for (int i = _pillars.Count - 1; i >= 0; i--)
             {
-                PropertyInfo p = FindProperty(t, "name");
-                if (p != null) v = p.GetValue(cfg);
+                var p = _pillars[i];
+                if (now < p.end) continue;
+                if (IsInstanceValid(p.glow)) p.glow.QueueFree();
+                if (IsInstanceValid(p.core)) p.core.QueueFree();
+                _pillars.RemoveAt(i);
             }
-            return v as string;
         }
+
+        private static bool IsInstanceValid(GodotObject o) => GodotObject.IsInstanceValid(o);
 
         private static FieldInfo FindField(Type type, string name)
         {
@@ -269,17 +171,6 @@ namespace CactusTune
             {
                 FieldInfo f = type.GetField(name, Flags);
                 if (f != null) return f;
-                type = type.BaseType;
-            }
-            return null;
-        }
-
-        private static PropertyInfo FindProperty(Type type, string name)
-        {
-            while (type != null)
-            {
-                PropertyInfo p = type.GetProperty(name, Flags);
-                if (p != null) return p;
                 type = type.BaseType;
             }
             return null;
