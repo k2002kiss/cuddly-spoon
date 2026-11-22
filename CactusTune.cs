@@ -12,6 +12,7 @@ namespace MagicPillar
         private SceneTree _tree;
         private double _scanAt;
         private readonly Dictionary<int, Vector2> _seen = new Dictionary<int, Vector2>();
+        private readonly HashSet<int> _debugSpawned = new HashSet<int>();
         private readonly List<(Sprite2D glow, Sprite2D core, double end)> _pillars = new List<(Sprite2D, Sprite2D, double)>();
 
         public void Initialize(XWModRuntimeContext context)
@@ -29,7 +30,6 @@ namespace MagicPillar
                 if (_tree != null) _tree.ProcessFrame += OnFrame;
             }
             Console.WriteLine("MAGIC_PILLAR_LOADED");
-            SpawnPillar(new Vector2(640, 360));
         }
 
         public void Shutdown()
@@ -89,6 +89,7 @@ namespace MagicPillar
                     {
                         _seen[idx] = pos;
                         active.Add(idx);
+                        if (_debugSpawned.Add(idx)) SpawnPillar(pos);
                     }
                 }
 
@@ -101,6 +102,7 @@ namespace MagicPillar
                 {
                     Vector2 pos = _seen[idx];
                     _seen.Remove(idx);
+                    _debugSpawned.Remove(idx);
                     SpawnPillar(pos);
                 }
             }
