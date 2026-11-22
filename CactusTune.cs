@@ -10,12 +10,13 @@ namespace DamageNumbers
     {
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
         private SceneTree _tree;
-        private double _scanAt;
-        private readonly Dictionary<ulong, double> _hp = new Dictionary<ulong, double>();
-        private readonly List<(Label label, double start, Vector2 pos)> _labels = new List<(Label, double, Vector2)>();
+        private CanvasLayer _layer;
         private Label _debug;
+        private double _scanAt;
         private int _count;
         private string _sample;
+        private readonly Dictionary<ulong, double> _hp = new Dictionary<ulong, double>();
+        private readonly List<(Label label, double start, Vector2 pos)> _labels = new List<(Label, double, Vector2)>();
 
         public void Initialize(XWModRuntimeContext context)
         {
@@ -31,14 +32,6 @@ namespace DamageNumbers
                 _tree = Engine.GetMainLoop() as SceneTree;
                 if (_tree != null) _tree.ProcessFrame += OnFrame;
             }
-            if (_tree?.Root != null)
-            {
-                _debug = new Label { ZIndex = 200, Position = new Vector2(12, 80) };
-                _debug.AddThemeFontSizeOverride("font_size", 18);
-                _debug.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0));
-                _debug.AddThemeConstantOverride("outline_size", 4);
-                _tree.Root.AddChild(_debug);
-            }
             Console.WriteLine("DAMAGE_NUM_LOADED");
         }
 
@@ -52,11 +45,26 @@ namespace DamageNumbers
             double now = Time.GetTicksMsec() / 1000.0;
             if (now < _scanAt) return;
             _scanAt = now + 0.1;
-            if (_tree?.Root == null) return;
+            if (_tree == null) return;
+            Node scene = _tree.CurrentScene;
+            if (scene == null) return;
+            EnsureUi(scene);
             _count = 0; _sample = null;
-            Scan(_tree.Root);
+            Scan(scene);
             UpdateDebug();
             TickLabels(now);
+        }
+
+        private void EnsureUi(Node scene)
+        {
+            if (_layer != null && GodotObject.IsInstanceValid(_layer) && _layer.IsInsideTree()) return;
+            _layer = new CanvasLayer { Layer = 100 };
+            scene.AddChild(_layer);
+            _debug = new Label { Position = new Vector2(12, 80), ZIndex = 200 };
+            _debug.AddThemeFontSizeOverride("font_size", 18);
+            _debug.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0));
+            _debug.AddThemeConstantOverride("outline_size", 4);
+            _layer.AddChild(_debug);
         }
 
         private void Scan(Node node)
@@ -76,8 +84,8 @@ namespace DamageNumbers
                         if (_hp.TryGetValue(id, out double old))
                         {
                             double diff = old - hp;
-                            if (diff > 0.5) Show(n2.GlobalPosition, "-" + Math.Round(diff), new Color(1, 1, 1));
-                            else if (diff < -0.5) Show(n2.GlobalPosition, "+" + Math.Round(-diff), new Color(0.4f, 1, 0.4f));
+                            if (diff > 0.5) Show(n2, "-" + Math.Round(diff), new Color(1, 1, 1));
+                            else if (diff < -0.5) Show(n2, "+" + Math.Round(-diff), new Color(0.4f, 1, 0.4f));
                         }
                         _hp[id] = hp;
                     }
@@ -86,22 +94,17 @@ namespace DamageNumbers
             foreach (Node child in node.GetChildren()) Scan(child);
         }
 
-        private void Show(Vector2 pos, string text, Color color)
+        private void Show(Node2D target, string text, Color color)
         {
-            if (_tree?.Root == null) return;
-            var label = new Label
-            {
-                Text = text,
-                Modulate = color,
-                ZIndex = 100,
-                HorizontalAlignment = HorizontalAlignment.Center,
-            };
+            if (_layer == null) return;
+            var label = new Label { Text = text, Modulate = color, ZIndex = 300 };
             label.AddThemeFontSizeOverride("font_size", 22);
             label.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0, 0.85f));
             label.AddThemeConstantOverride("outline_size", 4);
-            label.GlobalPosition = pos + new Vector2(-10, -70);
-            _tree.Root.AddChild(label);
-            _labels.Add((label, Time.GetTicksMsec() / 1000.0, pos + new Vector2(-10, -70)));
+            Vector2 pos = target.GetGlobalTransformWithCanvas().Origin + new Vector2(-10, -70);
+            label.Position = pos;
+            _layer.AddChild(label);
+            _labels.Add((label, Time.GetTicksMsec() / 1000.0, pos));
         }
 
         private void TickLabels(double now)
@@ -116,7 +119,7 @@ namespace DamageNumbers
                     _labels.RemoveAt(i);
                     continue;
                 }
-                item.label.GlobalPosition = item.pos + new Vector2(0, (float)(-40 * t));
+                item.label.Position = item.pos + new Vector2(0, (float)(-40 * t));
                 item.label.Modulate = new Color(item.label.Modulate.R, item.label.Modulate.G, item.label.Modulate.B, (float)(1 - t / 0.9));
             }
         }
