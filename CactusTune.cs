@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using Godot;
 using PVZHE.ModEditor.ModSystem;
 
@@ -8,33 +7,17 @@ namespace WmcqArt
 {
     public sealed class Entry : IXWModRuntimeEntry
     {
-        private object _inner;
-        private Type _innerType;
         private SceneTree _tree;
         private Texture2D _tex;
         private readonly HashSet<ulong> _done = new HashSet<ulong>();
 
         public void Initialize(XWModRuntimeContext context)
         {
-            try
-            {
-                byte[] bytes = FileAccess.GetFileAsBytes("res://Runtime/WMCQImpl.dll");
-                Assembly asm = Assembly.Load(bytes);
-                _innerType = asm.GetType("WmcqGoldCardPoolRuntimeEntryXXXXXXXX");
-                if (_innerType != null)
-                {
-                    _inner = Activator.CreateInstance(_innerType);
-                    _innerType.GetMethod("Initialize", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.Invoke(_inner, new object[] { context });
-                }
-                Console.WriteLine("WMCQ_ART_INIT inner=" + (_inner != null));
-            }
-            catch (Exception e) { Console.WriteLine("WMCQ_ART_INIT_ERR " + e); }
+            Console.WriteLine("WMCQ_ART_INIT");
         }
 
         public void OnAllModsLoaded()
         {
-            try { _innerType?.GetMethod("OnAllModsLoaded", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.Invoke(_inner, null); }
-            catch (Exception e) { Console.WriteLine("WMCQ_ART_ALL_ERR " + e); }
             _tree = Engine.GetMainLoop() as SceneTree;
             if (_tree != null) _tree.ProcessFrame += OnFrame;
             LoadTexture();
@@ -44,7 +27,6 @@ namespace WmcqArt
         public void Shutdown()
         {
             if (_tree != null) _tree.ProcessFrame -= OnFrame;
-            try { _innerType?.GetMethod("Shutdown", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.Invoke(_inner, null); } catch { }
         }
 
         private void LoadTexture()
