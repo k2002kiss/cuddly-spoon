@@ -59,7 +59,7 @@ namespace DamageNumbers
 
         private void Scan(Node node)
         {
-            if (node is Node2D n2 && node.GetType().Name.Contains("Zombie"))
+            if (node is Node2D n2)
             {
                 object inst = FindField(node.GetType(), "instance")?.GetValue(node);
                 if (inst != null)
@@ -72,8 +72,9 @@ namespace DamageNumbers
                         if (_hp.TryGetValue(id, out double old))
                         {
                             double diff = old - hp;
-                            if (diff > 0.5) Show(n2, "-" + Math.Round(diff), new Color(1, 1, 1));
-                            else if (diff < -0.5) Show(n2, "+" + Math.Round(-diff), new Color(0.4f, 1, 0.4f));
+                            bool isZombie = node.GetType().Name.Contains("Zombie");
+                            if (diff > 0.5 && isZombie) Show(n2, "-" + Math.Round(diff), new Color(1, 1, 1));
+                            else if (diff < -0.5 && !isZombie) Show(n2, "+" + Math.Round(-diff), new Color(0.4f, 1, 0.4f));
                         }
                         _hp[id] = hp;
                     }
