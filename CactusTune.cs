@@ -13,6 +13,9 @@ namespace DamageNumbers
         private double _scanAt;
         private readonly Dictionary<ulong, double> _hp = new Dictionary<ulong, double>();
         private readonly List<(Label label, double start, Vector2 pos)> _labels = new List<(Label, double, Vector2)>();
+        private Label _debug;
+        private int _count;
+        private string _sample;
 
         public void Initialize(XWModRuntimeContext context)
         {
@@ -28,6 +31,14 @@ namespace DamageNumbers
                 _tree = Engine.GetMainLoop() as SceneTree;
                 if (_tree != null) _tree.ProcessFrame += OnFrame;
             }
+            if (_tree?.Root != null)
+            {
+                _debug = new Label { ZIndex = 200, Position = new Vector2(12, 80) };
+                _debug.AddThemeFontSizeOverride("font_size", 18);
+                _debug.AddThemeColorOverride("font_outline_color", new Color(0, 0, 0));
+                _debug.AddThemeConstantOverride("outline_size", 4);
+                _tree.Root.AddChild(_debug);
+            }
             Console.WriteLine("DAMAGE_NUM_LOADED");
         }
 
@@ -42,14 +53,15 @@ namespace DamageNumbers
             if (now < _scanAt) return;
             _scanAt = now + 0.1;
             if (_tree?.Root == null) return;
+            _count = 0; _sample = null;
             Scan(_tree.Root);
+            UpdateDebug();
             TickLabels(now);
         }
 
         private void Scan(Node node)
         {
-            string tn = node.GetType().Name;
-            if (tn.Contains("Zombie") && node is Node2D n2)
+            if (node is Node2D n2)
             {
                 object inst = FindField(node.GetType(), "instance")?.GetValue(node);
                 if (inst != null)
@@ -58,6 +70,8 @@ namespace DamageNumbers
                     if (hpObj != null)
                     {
                         double hp = Convert.ToDouble(hpObj);
+                        _count++;
+                        if (_sample == null) _sample = node.GetType().Name + ":" + hp;
                         ulong id = node.GetInstanceId();
                         if (_hp.TryGetValue(id, out double old))
                         {
@@ -105,6 +119,12 @@ namespace DamageNumbers
                 item.label.GlobalPosition = item.pos + new Vector2(0, (float)(-40 * t));
                 item.label.Modulate = new Color(item.label.Modulate.R, item.label.Modulate.G, item.label.Modulate.B, (float)(1 - t / 0.9));
             }
+        }
+
+        private void UpdateDebug()
+        {
+            if (_debug == null || !GodotObject.IsInstanceValid(_debug)) return;
+            _debug.Text = "HP nodes: " + _count + "  " + (_sample ?? "");
         }
 
         private static FieldInfo FindField(Type type, string name)
